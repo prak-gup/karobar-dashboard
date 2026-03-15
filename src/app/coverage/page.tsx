@@ -269,7 +269,21 @@ export default function CoveragePage() {
   const companies = entity_intelligence.most_mentioned_companies.slice(0, 15);
   const people = entity_intelligence.most_mentioned_people;
   const organizations = entity_intelligence.most_mentioned_organizations;
-  const coOccurrence = entity_intelligence.company_co_occurrence;
+  // co_occurrence may be Record<string, string[]> or {entity_1, entity_2, co_occurrences}[]
+  const coOccurrence: Record<string, string[]> = useMemo(() => {
+    const raw = entity_intelligence.company_co_occurrence;
+    if (!raw) return {};
+    if (!Array.isArray(raw)) return raw as Record<string, string[]>;
+    // Convert list format to dict format
+    const dict: Record<string, string[]> = {};
+    (raw as { entity_1: string; entity_2: string; co_occurrences: number }[]).forEach((item) => {
+      if (!dict[item.entity_1]) dict[item.entity_1] = [];
+      if (!dict[item.entity_1].includes(item.entity_2)) dict[item.entity_1].push(item.entity_2);
+      if (!dict[item.entity_2]) dict[item.entity_2] = [];
+      if (!dict[item.entity_2].includes(item.entity_1)) dict[item.entity_2].push(item.entity_1);
+    });
+    return dict;
+  }, [entity_intelligence.company_co_occurrence]);
   const totalArticles = data.articles.length;
 
   return (

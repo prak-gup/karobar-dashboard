@@ -191,7 +191,7 @@ export interface Analyses {
     most_mentioned_companies: { name: string; count: number; avg_sentiment: number }[];
     most_mentioned_people: { name: string; count: number; roles: string[] }[];
     most_mentioned_organizations: { name: string; count: number; avg_sentiment?: number }[];
-    company_co_occurrence: Record<string, string[]>;
+    company_co_occurrence: Record<string, string[]> | { entity_1: string; entity_2: string; co_occurrences: number }[];
   };
   macro_indicators: Record<string, MacroIndicator>;
   investment_themes: Record<string, unknown>;
