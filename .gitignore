@@ -5,3 +5,4 @@ out
 *.tgz
 .env
 .env.local
+.vercel
