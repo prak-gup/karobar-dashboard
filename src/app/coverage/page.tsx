@@ -1,7 +1,7 @@
 "use client";
 
 import { useDataContext } from "@/lib/data";
-import { categoryLabel, sentimentColor } from "@/lib/utils";
+import { categoryLabel, sentimentColor, sentimentBg, formatDate } from "@/lib/utils";
 import ChartCard from "@/components/ui/ChartCard";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import {
@@ -9,6 +9,7 @@ import {
 } from "recharts";
 import {
   Map, Building2, Users, Tag, Focus, GitBranch, AlertTriangle, Sprout, TrendingDown,
+  Globe2, Landmark, Mic2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMemo } from "react";
@@ -136,6 +137,123 @@ export default function CoveragePage() {
     return sectorData.filter((s) => s.count <= threshold && s.count > 0);
   }, [data, sectorData]);
 
+  /* ---- National vs International ---- */
+  const nationalIntl = useMemo(() => {
+    if (!data) return null;
+    const intlKeywords = [
+      "china", "us ", "usa", "trump", "global", "world", "international",
+      "dollar", "fed ", "imf", "opec", "crude", "america", "japan",
+      "europe", "uk ", "germany", "foreign",
+    ];
+    let intlCount = 0;
+    let nationalCount = 0;
+    data.articles.forEach((a) => {
+      const text = `${a.headline} ${a.summary}`.toLowerCase();
+      const isIntl =
+        a.category === "global_economy" ||
+        intlKeywords.some((kw) => text.includes(kw));
+      if (isIntl) intlCount++;
+      else nationalCount++;
+    });
+    const total = intlCount + nationalCount;
+    return {
+      national: nationalCount,
+      international: intlCount,
+      nationalPct: total > 0 ? (nationalCount / total) * 100 : 0,
+      intlPct: total > 0 ? (intlCount / total) * 100 : 0,
+      total,
+    };
+  }, [data]);
+
+  /* ---- RBI Policy Coverage ---- */
+  const rbiData = useMemo(() => {
+    if (!data) return null;
+    const rbiArticles = data.articles.filter(
+      (a) =>
+        a.entities.some((e) => e.toUpperCase() === "RBI") ||
+        a.keywords.some((kw) => kw.toLowerCase() === "rbi")
+    );
+    const sentimentBreakdown: Record<string, number> = {};
+    rbiArticles.forEach((a) => {
+      sentimentBreakdown[a.sentiment] = (sentimentBreakdown[a.sentiment] || 0) + 1;
+    });
+    const categoryBreakdown: Record<string, number> = {};
+    rbiArticles.forEach((a) => {
+      categoryBreakdown[a.category] = (categoryBreakdown[a.category] || 0) + 1;
+    });
+    const categoryData = Object.entries(categoryBreakdown)
+      .sort(([, a], [, b]) => b - a)
+      .map(([cat, count]) => ({ category: categoryLabel(cat), count }));
+    return {
+      total: rbiArticles.length,
+      sentimentBreakdown,
+      topArticles: rbiArticles
+        .sort((a, b) => b.sentiment_score - a.sentiment_score || a.date.localeCompare(b.date))
+        .slice(0, 5),
+      categoryData,
+    };
+  }, [data]);
+
+  /* ---- Expert & Analyst Voices ---- */
+  const expertData = useMemo(() => {
+    if (!data) return null;
+    // Count all entity mentions across articles
+    const entityMentions: Record<string, { count: number; headlines: string[] }> = {};
+    data.articles.forEach((a) => {
+      a.entities.forEach((e) => {
+        const name = e.trim();
+        if (!name) return;
+        if (!entityMentions[name]) entityMentions[name] = { count: 0, headlines: [] };
+        entityMentions[name].count++;
+        if (entityMentions[name].headlines.length < 3) {
+          entityMentions[name].headlines.push(a.headline);
+        }
+      });
+    });
+
+    // Known institutional abbreviations to exclude from "people" detection
+    const institutionalPatterns = [
+      "RBI", "SEBI", "BJP", "BSE", "NSE", "IPO", "FII", "DII", "GDP", "IMF",
+      "OPEC", "FPI", "SBI", "HDFC", "LIC", "ICICI", "TCS", "MPC", "CPI", "WPI",
+      "GST", "EMI", "NPA", "NBFC", "EPFO", "PAN", "ITR", "PPF", "NPS", "UPI",
+      "IRCTC", "NTPC", "ONGC", "BHEL", "BPCL", "GAIL", "SAIL", "IREDA",
+    ];
+    const isInstitutional = (name: string) => {
+      const upper = name.toUpperCase();
+      return institutionalPatterns.some((p) => upper === p) || /^[A-Z]{2,6}$/.test(name);
+    };
+
+    // People: have a space, length > 4, not purely institutional abbreviation, 2+ mentions
+    const experts = Object.entries(entityMentions)
+      .filter(
+        ([name, info]) =>
+          info.count >= 2 &&
+          name.includes(" ") &&
+          name.length > 4 &&
+          !isInstitutional(name)
+      )
+      .sort(([, a], [, b]) => b.count - a.count)
+      .slice(0, 15)
+      .map(([name, info]) => ({ name, count: info.count, headlines: info.headlines }));
+
+    // Research houses: institutional names with 2+ mentions, contain "Securities", "Asset", "Research" etc.
+    const researchHouseKeywords = [
+      "securities", "asset", "research", "capital", "wealth", "broking",
+      "sharekhan", "mutual", "advisory", "financial", "brokerage",
+    ];
+    const researchHouses = Object.entries(entityMentions)
+      .filter(
+        ([name, info]) =>
+          info.count >= 2 &&
+          researchHouseKeywords.some((kw) => name.toLowerCase().includes(kw))
+      )
+      .sort(([, a], [, b]) => b.count - a.count)
+      .slice(0, 10)
+      .map(([name, info]) => ({ name, count: info.count, headlines: info.headlines }));
+
+    return { experts, researchHouses };
+  }, [data]);
+
   if (loading) return <LoadingSkeleton />;
   if (error || !data) return <div className="p-8 text-red-400">Error: {error}</div>;
 
@@ -161,6 +279,242 @@ export default function CoveragePage() {
           {Object.keys(sector_analysis.sectors).length} sectors &middot; January 2026
         </p>
       </motion.div>
+
+      {/* ====== NEW-1. National vs International Coverage ====== */}
+      {nationalIntl && (
+        <ChartCard
+          title="National vs International Coverage"
+          subtitle={`Coverage split across ${nationalIntl.total} articles`}
+          action={<Globe2 size={16} className="text-[#a1a1aa]" />}
+        >
+          <div className="space-y-4">
+            {/* Stat cards */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 rounded-lg bg-[#0a0a0f] border border-[#1e1e2e] text-center">
+                <p className="text-xs text-[#a1a1aa] mb-1">National</p>
+                <p className="text-2xl font-bold font-mono text-[#f5a623]">{nationalIntl.national}</p>
+                <p className="text-xs text-[#a1a1aa] mt-0.5">{nationalIntl.nationalPct.toFixed(1)}% of articles</p>
+              </div>
+              <div className="p-4 rounded-lg bg-[#0a0a0f] border border-[#1e1e2e] text-center">
+                <p className="text-xs text-[#a1a1aa] mb-1">International</p>
+                <p className="text-2xl font-bold font-mono text-[#3b82f6]">{nationalIntl.international}</p>
+                <p className="text-xs text-[#a1a1aa] mt-0.5">{nationalIntl.intlPct.toFixed(1)}% of articles</p>
+              </div>
+            </div>
+
+            {/* Stacked horizontal bar */}
+            <div>
+              <p className="text-xs text-[#a1a1aa] mb-2">Coverage split</p>
+              <div className="h-8 rounded-lg bg-[#0a0a0f] border border-[#1e1e2e] overflow-hidden flex">
+                <div
+                  className="h-full flex items-center justify-center transition-all"
+                  style={{
+                    width: `${nationalIntl.nationalPct}%`,
+                    backgroundColor: "#f5a623",
+                    minWidth: nationalIntl.nationalPct > 2 ? "auto" : "4px",
+                  }}
+                >
+                  {nationalIntl.nationalPct > 10 && (
+                    <span className="text-[10px] text-black font-semibold px-1">
+                      National {nationalIntl.nationalPct.toFixed(0)}%
+                    </span>
+                  )}
+                </div>
+                <div
+                  className="h-full flex items-center justify-center transition-all"
+                  style={{
+                    width: `${nationalIntl.intlPct}%`,
+                    backgroundColor: "#3b82f6",
+                    minWidth: nationalIntl.intlPct > 2 ? "auto" : "4px",
+                  }}
+                >
+                  {nationalIntl.intlPct > 10 && (
+                    <span className="text-[10px] text-white font-semibold px-1">
+                      International {nationalIntl.intlPct.toFixed(0)}%
+                    </span>
+                  )}
+                </div>
+              </div>
+              {/* Legend */}
+              <div className="flex gap-4 mt-2">
+                <div className="flex items-center gap-1.5 text-xs">
+                  <div className="w-2.5 h-2.5 rounded-sm bg-[#f5a623]" />
+                  <span className="text-[#a1a1aa]">National</span>
+                  <span className="font-mono text-[#e4e4e7]">{nationalIntl.national}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs">
+                  <div className="w-2.5 h-2.5 rounded-sm bg-[#3b82f6]" />
+                  <span className="text-[#a1a1aa]">International</span>
+                  <span className="font-mono text-[#e4e4e7]">{nationalIntl.international}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </ChartCard>
+      )}
+
+      {/* ====== NEW-2. RBI Policy Coverage ====== */}
+      {rbiData && rbiData.total > 0 && (
+        <ChartCard
+          title="RBI Policy Coverage"
+          subtitle={`Dedicated RBI coverage analysis — ${rbiData.total} articles`}
+          action={<Landmark size={16} className="text-[#3b82f6]" />}
+        >
+          <div className="space-y-4">
+            {/* Top stats row */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3 rounded-lg bg-[#0a0a0f] border border-[#1e1e2e] text-center">
+                <p className="text-xs text-[#a1a1aa] mb-1">Total RBI Articles</p>
+                <p className="text-xl font-bold font-mono text-[#3b82f6]">{rbiData.total}</p>
+              </div>
+              {Object.entries(rbiData.sentimentBreakdown)
+                .sort(([, a], [, b]) => b - a)
+                .map(([sent, count]) => (
+                  <div key={sent} className="p-3 rounded-lg bg-[#0a0a0f] border border-[#1e1e2e] text-center">
+                    <p className="text-xs text-[#a1a1aa] mb-1 capitalize">{sent}</p>
+                    <p className="text-xl font-bold font-mono" style={{ color: sentimentColor(sent) }}>
+                      {count}
+                    </p>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${sentimentBg(sent)}`}>
+                      {((count / rbiData.total) * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                ))}
+            </div>
+
+            {/* Top 5 RBI headlines */}
+            <div>
+              <p className="text-xs text-[#a1a1aa] mb-2 font-medium">Top RBI Headlines</p>
+              <div className="space-y-2">
+                {rbiData.topArticles.map((article, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -10 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: i * 0.05 }}
+                    className="flex items-start gap-3 p-3 rounded-lg bg-[#0a0a0f] border border-[#1e1e2e] hover:border-[#2e2e3e] transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-[#e4e4e7] leading-snug">{article.headline}</p>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="text-[10px] text-[#a1a1aa] font-mono">{formatDate(article.date)}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${sentimentBg(article.sentiment)}`}>
+                          {article.sentiment}
+                        </span>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+
+            {/* RBI articles by category */}
+            {rbiData.categoryData.length > 0 && (
+              <div>
+                <p className="text-xs text-[#a1a1aa] mb-2 font-medium">RBI Articles by Category</p>
+                <div className="flex flex-wrap gap-2">
+                  {rbiData.categoryData.map((cat, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0a0a0f] border border-[#1e1e2e]"
+                    >
+                      <span className="text-xs text-[#e4e4e7]">{cat.category}</span>
+                      <span className="text-xs font-mono text-[#3b82f6] font-bold">{cat.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </ChartCard>
+      )}
+
+      {/* ====== NEW-3. Expert & Analyst Voices ====== */}
+      {expertData && (expertData.experts.length > 0 || expertData.researchHouses.length > 0) && (
+        <ChartCard
+          title="Expert & Analyst Voices"
+          subtitle="Who gets quoted — individuals and research houses appearing 2+ times"
+          action={<Mic2 size={16} className="text-[#a1a1aa]" />}
+        >
+          <div className="space-y-5">
+            {/* Individual Experts */}
+            {expertData.experts.length > 0 && (
+              <div>
+                <p className="text-xs text-[#a1a1aa] mb-2 font-medium">Quoted Analysts & Experts</p>
+                <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1 custom-scrollbar">
+                  {expertData.experts.map((expert, i) => (
+                    <motion.div
+                      key={expert.name}
+                      initial={{ opacity: 0, x: -10 }}
+                      whileInView={{ opacity: 1, x: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: i * 0.03 }}
+                      className="p-3 rounded-lg bg-[#0a0a0f] border border-[#1e1e2e] hover:border-[#2e2e3e] transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-sm text-[#e4e4e7] font-medium truncate">{expert.name}</span>
+                          <span className="text-xs font-mono text-[#f5a623] font-bold flex-shrink-0">{expert.count}x</span>
+                        </div>
+                        <div className="w-20 flex-shrink-0">
+                          <div className="h-1.5 rounded-full bg-[#1e1e2e] overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-[#f5a623]"
+                              style={{
+                                width: `${expertData.experts.length > 0
+                                  ? (expert.count / expertData.experts[0].count) * 100
+                                  : 0}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      {/* Sample headlines */}
+                      <div className="mt-1.5 space-y-0.5">
+                        {expert.headlines.map((hl, hi) => (
+                          <p key={hi} className="text-[11px] text-[#a1a1aa] leading-snug truncate">
+                            &ldquo;{hl}&rdquo;
+                          </p>
+                        ))}
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Research Houses */}
+            {expertData.researchHouses.length > 0 && (
+              <div>
+                <p className="text-xs text-[#a1a1aa] mb-2 font-medium">Quoted Research Houses</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {expertData.researchHouses.map((house, i) => (
+                    <motion.div
+                      key={house.name}
+                      initial={{ opacity: 0, y: 8 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: i * 0.04 }}
+                      className="p-3 rounded-lg bg-[#0a0a0f] border border-[#1e1e2e] hover:border-[#2e2e3e] transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-[#e4e4e7] font-medium truncate">{house.name}</span>
+                        <span className="text-xs font-mono text-[#8b5cf6] font-bold flex-shrink-0">{house.count}x</span>
+                      </div>
+                      {house.headlines.length > 0 && (
+                        <p className="text-[10px] text-[#a1a1aa] mt-1 truncate leading-snug">
+                          &ldquo;{house.headlines[0]}&rdquo;
+                        </p>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </ChartCard>
+      )}
 
       {/* ====== 1. Sector Coverage — Horizontal Bar Chart ====== */}
       <ChartCard

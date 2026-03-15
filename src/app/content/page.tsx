@@ -8,7 +8,7 @@ import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import { Layers, Grid3X3, TrendingUp, Sparkles, BarChart3 } from "lucide-react";
+import { Layers, Grid3X3, TrendingUp, Sparkles, BarChart3, PieChart as PieChartIcon } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState, useMemo } from "react";
 
@@ -28,6 +28,69 @@ const ARTICLE_SIZES: { key: string; label: string }[] = [
 ];
 
 const SENTIMENT_TYPES = ["positive", "negative", "neutral", "mixed"] as const;
+
+/* -------- Investment Topic Definitions -------- */
+
+const INVEST_TOPIC_COLORS: Record<string, string> = {
+  "Gold & Silver": "#f5a623",
+  "Equity/Stock Market": "#3b82f6",
+  "Banking & NPA": "#8b5cf6",
+  "Currency/Forex": "#06b6d4",
+  "Mutual Funds/SIP/ETF": "#22c55e",
+  "IPO & Listings": "#ec4899",
+  "Insurance": "#f59e0b",
+  "Real Estate": "#14b8a6",
+  "Bonds/Debt": "#a855f7",
+};
+
+interface InvestMatcher {
+  (a: { keywords: string[]; category: string }): boolean;
+}
+
+const INVEST_DEFS: Record<string, InvestMatcher> = {
+  "Gold & Silver": (a) => {
+    const kw = a.keywords.map((k) => k.toLowerCase());
+    return kw.some((k) => k.includes("gold") || k.includes("silver") || k.includes("precious metal"));
+  },
+  "Equity/Stock Market": (a) => {
+    const kw = a.keywords.map((k) => k.toLowerCase());
+    return (
+      kw.some((k) =>
+        k.includes("sensex") || k.includes("nifty") || k.includes("stock") ||
+        k.includes("fii selling") || k.includes("dii")
+      ) || a.category === "stock_market"
+    );
+  },
+  "Banking & NPA": (a) => {
+    const kw = a.keywords.map((k) => k.toLowerCase());
+    return (
+      kw.some((k) => k.includes("npa") || k.includes("banking") || k.includes("rbi")) ||
+      a.category === "banking_finance"
+    );
+  },
+  "Currency/Forex": (a) => a.category === "currency_forex",
+  "Mutual Funds/SIP/ETF": (a) => {
+    const kw = a.keywords.map((k) => k.toLowerCase());
+    return (
+      kw.some((k) =>
+        k.includes("mutual fund") || k.includes("sip") || k.includes("etf") || k.includes("investment")
+      ) || a.category === "investment_advisory"
+    );
+  },
+  "IPO & Listings": (a) => a.keywords.some((k) => k.toUpperCase().includes("IPO")),
+  "Insurance": (a) => a.category === "insurance",
+  "Real Estate": (a) => a.category === "real_estate",
+  "Bonds/Debt": (a) => {
+    const kw = a.keywords.map((k) => k.toLowerCase());
+    return kw.some((k) => k.includes("bond") || k.includes("debt"));
+  },
+};
+
+/* -------- News vs Economy vs Investment split categories -------- */
+
+const MARKET_CURRENT_CATS = ["corporate_news", "stock_market", "commodities", "currency_forex"];
+const ECONOMY_POLICY_CATS = ["government_policy", "regulatory", "global_economy", "employment_labor", "agriculture", "infrastructure", "trade_exports"];
+const INVESTMENT_PERSONAL_CATS = ["investment_advisory", "personal_finance", "insurance", "real_estate", "banking_finance"];
 
 const SENTIMENT_BAR_COLORS: Record<string, string> = {
   positive: "#22c55e",
@@ -180,6 +243,48 @@ export default function ContentMixPage() {
     [deepDiveCards]
   );
 
+  // 6. Investment topic breakdown
+  const investTopicData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    Object.keys(INVEST_DEFS).forEach((topic) => {
+      counts[topic] = 0;
+    });
+    articles.forEach((a) => {
+      Object.entries(INVEST_DEFS).forEach(([topic, matcher]) => {
+        if (matcher(a)) counts[topic]++;
+      });
+    });
+    return Object.entries(counts)
+      .filter(([, count]) => count > 0)
+      .sort(([, a], [, b]) => b - a)
+      .map(([topic, count]) => ({
+        name: topic,
+        count,
+        fill: INVEST_TOPIC_COLORS[topic] ?? "#a1a1aa",
+      }));
+  }, [articles]);
+
+  // 7. News vs Economy vs Investment split
+  const newsSplitData = useMemo(() => {
+    let marketCurrent = 0;
+    let economyPolicy = 0;
+    let investPersonal = 0;
+    articles.forEach((a) => {
+      if (MARKET_CURRENT_CATS.includes(a.category)) marketCurrent++;
+      else if (ECONOMY_POLICY_CATS.includes(a.category)) economyPolicy++;
+      else if (INVESTMENT_PERSONAL_CATS.includes(a.category)) investPersonal++;
+    });
+    const total = marketCurrent + economyPolicy + investPersonal;
+    return {
+      segments: [
+        { label: "Market/Current News", count: marketCurrent, color: "#3b82f6", pct: total > 0 ? ((marketCurrent / total) * 100).toFixed(1) : "0" },
+        { label: "Economy/Policy", count: economyPolicy, color: "#f5a623", pct: total > 0 ? ((economyPolicy / total) * 100).toFixed(1) : "0" },
+        { label: "Investment/Personal", count: investPersonal, color: "#22c55e", pct: total > 0 ? ((investPersonal / total) * 100).toFixed(1) : "0" },
+      ],
+      total,
+    };
+  }, [articles]);
+
   if (loading) return <LoadingSkeleton />;
   if (error || !data) return <div className="p-8 text-red-400">Error: {error}</div>;
 
@@ -195,6 +300,100 @@ export default function ContentMixPage() {
           What does the newsroom cover? &middot; {totalArticles} articles across {categoryStats.length} categories &middot; January 2026
         </p>
       </motion.div>
+
+      {/* ====== 0. Investment Topic Breakdown ====== */}
+      <ChartCard
+        title="Investment Topic Breakdown"
+        subtitle="How investment-related coverage is distributed across sub-categories"
+        action={
+          <div className="flex items-center gap-1.5">
+            <BarChart3 size={14} className="text-[#f5a623]" />
+            <span className="text-xs text-[#a1a1aa]">{investTopicData.length} topics</span>
+          </div>
+        }
+      >
+        {investTopicData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={Math.max(260, investTopicData.length * 40)}>
+            <BarChart
+              data={investTopicData}
+              layout="vertical"
+              margin={{ top: 5, right: 60, bottom: 5, left: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" horizontal={false} />
+              <XAxis type="number" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={160}
+                tick={{ fill: "#a1a1aa", fontSize: 11 }}
+              />
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null;
+                  const d = payload[0].payload as { name: string; count: number };
+                  const pct = totalArticles > 0 ? ((d.count / totalArticles) * 100).toFixed(1) : "0";
+                  return (
+                    <div className="bg-[#1a1a2e] border border-[#2e2e3e] rounded-lg px-3 py-2 shadow-xl">
+                      <p className="text-sm text-[#e4e4e7] font-medium">{d.name}</p>
+                      <p className="text-xs text-[#a1a1aa]">{d.count} articles ({pct}%)</p>
+                    </div>
+                  );
+                }}
+              />
+              <Bar dataKey="count" radius={[0, 6, 6, 0]} label={{ position: "right", fill: "#a1a1aa", fontSize: 11 }}>
+                {investTopicData.map((entry, idx) => (
+                  <Cell key={idx} fill={entry.fill} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="text-[#52525b] text-sm py-8 text-center">No investment-related articles found.</p>
+        )}
+
+        {/* Current News vs Economy vs Investment split */}
+        {newsSplitData.total > 0 && (
+          <div className="mt-6 pt-4 border-t border-[#1e1e2e]">
+            <p className="text-xs text-[#a1a1aa] mb-3 font-medium">Current News vs Economy vs Investment</p>
+
+            {/* Stacked bar */}
+            <div className="flex w-full h-7 rounded-lg overflow-hidden mb-3">
+              {newsSplitData.segments.map((seg) => (
+                <div
+                  key={seg.label}
+                  className="h-full flex items-center justify-center text-[10px] font-mono font-bold transition-all relative group"
+                  style={{
+                    width: `${seg.pct}%`,
+                    backgroundColor: seg.color,
+                    minWidth: Number(seg.pct) > 0 ? "32px" : "0px",
+                  }}
+                >
+                  <span className="text-[#0a0a0f] drop-shadow-sm">
+                    {Number(seg.pct) >= 8 ? `${seg.pct}%` : ""}
+                  </span>
+                  {/* hover label */}
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-10">
+                    <div className="bg-[#1a1a2e] border border-[#2e2e3e] rounded px-2 py-1 text-[10px] whitespace-nowrap shadow-xl text-[#e4e4e7]">
+                      {seg.label}: {seg.count} ({seg.pct}%)
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Legend */}
+            <div className="flex flex-wrap gap-4">
+              {newsSplitData.segments.map((seg) => (
+                <div key={seg.label} className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: seg.color }} />
+                  <span className="text-[11px] text-[#a1a1aa]">{seg.label}</span>
+                  <span className="text-[11px] text-[#52525b] font-mono">({seg.count})</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </ChartCard>
 
       {/* ====== 1. Category Breakdown ====== */}
       <ChartCard
