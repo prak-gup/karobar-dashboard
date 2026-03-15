@@ -169,8 +169,8 @@ export interface Analyses {
   };
   sector_analysis: {
     sectors: Record<string, { count: number; avg_sentiment: number; top_keywords: string[] }>;
-    emerging_sectors: string[];
-    stressed_sectors: string[];
+    emerging_sectors: (string | { sector: string; first_half: number; second_half: number })[];
+    stressed_sectors: (string | { sector: string; avg_sentiment: number; count: number })[];
     sector_heatmap: Record<string, Record<string, number>>;
   };
   policy_tracker: {
@@ -190,7 +190,7 @@ export interface Analyses {
   entity_intelligence: {
     most_mentioned_companies: { name: string; count: number; avg_sentiment: number }[];
     most_mentioned_people: { name: string; count: number; roles: string[] }[];
-    most_mentioned_organizations: { name: string; count: number; avg_sentiment: number }[];
+    most_mentioned_organizations: { name: string; count: number; avg_sentiment?: number }[];
     company_co_occurrence: Record<string, string[]>;
   };
   macro_indicators: Record<string, MacroIndicator>;

@@ -51,13 +51,14 @@ function EntityTooltip({ active, payload }: {
   payload?: any[];
 }) {
   if (!active || !payload?.length) return null;
-  const d = payload[0].payload as { name: string; count: number; avg_sentiment: number };
+  const d = payload[0].payload as { name: string; count: number; avg_sentiment?: number };
+  const sentiment = d.avg_sentiment ?? 0;
   return (
     <div className="bg-[#1a1a2e] border border-[#2e2e3e] rounded-lg px-3 py-2 shadow-xl">
       <p className="text-sm text-[#e4e4e7] font-medium">{d.name}</p>
       <p className="text-xs text-[#a1a1aa]">{d.count} mentions</p>
-      <p className="text-xs font-mono" style={{ color: sentimentBarColor(d.avg_sentiment) }}>
-        Avg Sentiment: {d.avg_sentiment.toFixed(3)}
+      <p className="text-xs font-mono" style={{ color: sentimentBarColor(sentiment) }}>
+        Avg Sentiment: {sentiment.toFixed(3)}
       </p>
     </div>
   );
@@ -258,8 +259,13 @@ export default function CoveragePage() {
   if (error || !data) return <div className="p-8 text-red-400">Error: {error}</div>;
 
   const { entity_intelligence, sector_analysis } = data.analyses;
-  const emergingSectors = sector_analysis.emerging_sectors ?? [];
-  const stressedSectors = sector_analysis.stressed_sectors ?? [];
+  // emerging/stressed may be string[] or object[] depending on data generation
+  const emergingSectors: string[] = (sector_analysis.emerging_sectors ?? []).map((es: unknown) =>
+    typeof es === "string" ? es : (es as { sector: string }).sector ?? ""
+  );
+  const stressedSectors: string[] = (sector_analysis.stressed_sectors ?? []).map((ss: unknown) =>
+    typeof ss === "string" ? ss : (ss as { sector: string }).sector ?? ""
+  );
   const companies = entity_intelligence.most_mentioned_companies.slice(0, 15);
   const people = entity_intelligence.most_mentioned_people;
   const organizations = entity_intelligence.most_mentioned_organizations;
@@ -751,7 +757,7 @@ export default function CoveragePage() {
               <Tooltip content={<EntityTooltip />} />
               <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={18}>
                 {organizations.slice(0, 15).map((o, idx) => (
-                  <Cell key={idx} fill={sentimentBarColor(o.avg_sentiment)} />
+                  <Cell key={idx} fill={sentimentBarColor(o.avg_sentiment ?? 0)} />
                 ))}
               </Bar>
             </BarChart>
