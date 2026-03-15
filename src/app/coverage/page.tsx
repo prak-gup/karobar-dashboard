@@ -27,24 +27,6 @@ function sentimentBarColor(score: number): string {
 
 /* ---------- Tooltip Components ---------- */
 
-function SectorTooltip({ active, payload }: {
-  active?: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  payload?: any[];
-}) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload as { sector: string; count: number; avgSentiment: number; pct: number };
-  return (
-    <div className="bg-[#1a1a2e] border border-[#2e2e3e] rounded-lg px-3 py-2 shadow-xl">
-      <p className="text-sm text-[#e4e4e7] font-medium">{d.sector}</p>
-      <p className="text-xs text-[#a1a1aa]">{d.count} articles ({d.pct.toFixed(1)}%)</p>
-      <p className="text-xs font-mono" style={{ color: sentimentBarColor(d.avgSentiment) }}>
-        Avg Sentiment: {d.avgSentiment.toFixed(3)}
-      </p>
-    </div>
-  );
-}
-
 function EntityTooltip({ active, payload }: {
   active?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -537,43 +519,7 @@ export default function CoveragePage() {
         </ChartCard>
       )}
 
-      {/* ====== 1. Sector Coverage — Horizontal Bar Chart ====== */}
-      <ChartCard
-        title="Sector Coverage"
-        subtitle="Article count by sector — bars colored by average sentiment"
-        action={
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-[#ef4444]">Negative</span>
-            <div className="w-16 h-1.5 rounded-full bg-gradient-to-r from-[#ef4444] via-[#f59e0b] to-[#22c55e]" />
-            <span className="text-[10px] text-[#22c55e]">Positive</span>
-          </div>
-        }
-      >
-        <ResponsiveContainer width="100%" height={Math.max(360, sectorData.length * 32)}>
-          <BarChart
-            data={sectorData}
-            layout="vertical"
-            margin={{ top: 5, right: 40, bottom: 5, left: 5 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" horizontal={false} />
-            <XAxis type="number" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
-            <YAxis
-              type="category"
-              dataKey="sector"
-              width={140}
-              tick={{ fill: "#a1a1aa", fontSize: 10 }}
-            />
-            <Tooltip content={<SectorTooltip />} />
-            <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={20}>
-              {sectorData.map((entry, idx) => (
-                <Cell key={idx} fill={sentimentBarColor(entry.avgSentiment)} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartCard>
-
-      {/* ====== 2. Sector Coverage Balance — Treemap-style Grid ====== */}
+      {/* ====== Sector Coverage Balance — Treemap-style Grid ====== */}
       <ChartCard
         title="Sector Coverage Balance"
         subtitle="Coverage equity — larger cards represent more articles"
