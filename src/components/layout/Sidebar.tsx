@@ -4,25 +4,25 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  TrendingUp,
-  ArrowLeftRight,
-  Newspaper,
-  Building2,
-  Landmark,
-  AlertTriangle,
+  PieChart,
+  LayoutGrid,
+  Thermometer,
+  Map,
+  Clock,
+  FileText,
   Menu,
   X,
 } from "lucide-react";
 import { useState } from "react";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Overview", icon: LayoutDashboard },
-  { href: "/market", label: "Market", icon: TrendingUp },
-  { href: "/flows", label: "Flows", icon: ArrowLeftRight },
-  { href: "/sentiment", label: "Sentiment", icon: Newspaper },
-  { href: "/sectors", label: "Sectors", icon: Building2 },
-  { href: "/policy", label: "Policy", icon: Landmark },
-  { href: "/risk", label: "Risk", icon: AlertTriangle },
+  { href: "/", label: "Newsroom", icon: LayoutDashboard },
+  { href: "/content", label: "Content Mix", icon: PieChart },
+  { href: "/placement", label: "Placement", icon: LayoutGrid },
+  { href: "/sentiment", label: "Sentiment", icon: Thermometer },
+  { href: "/coverage", label: "Coverage", icon: Map },
+  { href: "/rhythm", label: "Rhythm", icon: Clock },
+  { href: "/articles", label: "Articles", icon: FileText },
 ];
 
 export default function Sidebar() {
@@ -72,7 +72,7 @@ export default function Sidebar() {
       <aside className="hidden lg:flex flex-col fixed left-0 top-0 bottom-0 w-56 bg-[#0a0a0f] border-r border-[#1e1e2e] z-40">
         <div className="px-5 py-6 border-b border-[#1e1e2e]">
           <h1 className="text-[#f5a623] font-bold text-xl tracking-tight">Karobar</h1>
-          <p className="text-[#a1a1aa] text-xs mt-0.5">Financial Intelligence</p>
+          <p className="text-[#a1a1aa] text-xs mt-0.5">Editorial Intelligence</p>
         </div>
         <nav className="flex-1 flex flex-col gap-0.5 p-3 mt-1">
           {NAV_ITEMS.map((item) => {

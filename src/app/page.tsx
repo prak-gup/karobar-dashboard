@@ -1,185 +1,288 @@
 "use client";
 
 import { useDataContext } from "@/lib/data";
-import { formatINR, formatPercent, CHART_COLORS, formatDate } from "@/lib/utils";
+import { categoryLabel, sentimentColor, CHART_COLORS } from "@/lib/utils";
 import KpiCard from "@/components/ui/KpiCard";
 import ChartCard from "@/components/ui/ChartCard";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Legend, Area, AreaChart,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
 } from "recharts";
 import {
-  Newspaper, TrendingUp, TrendingDown, CircleDollarSign, Gem,
-  ArrowDownUp, Users, Scale, FileText, Layers, Lightbulb, ChevronDown, ChevronUp,
+  Newspaper, FileText, Star, TrendingUp, TrendingDown, Scale,
+  Users, Layers, ChevronDown, ChevronUp, Target, BarChart3, Bookmark,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
-function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) {
+const PIE_COLORS = ["#3b82f6", "#8b5cf6", "#f5a623", "#22c55e", "#ef4444", "#f59e0b", "#06b6d4", "#ec4899", "#84cc16", "#a855f7", "#14b8a6", "#f97316", "#64748b", "#e879f9", "#fb923c", "#4ade80", "#38bdf8", "#f87171", "#a78bfa", "#fbbf24"];
+
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-[#1a1a2e] border border-[#2e2e3e] rounded-lg px-3 py-2 shadow-xl">
       <p className="text-xs text-[#a1a1aa] mb-1">{label}</p>
       {payload.map((p, i) => (
         <p key={i} className="text-sm font-mono font-medium" style={{ color: p.color }}>
-          {p.name}: {formatINR(p.value)}
+          {p.name}: {p.value}
         </p>
       ))}
     </div>
   );
 }
 
-export default function OverviewPage() {
+export default function NewsroomOverview() {
   const { data, loading, error } = useDataContext();
-  const [showIndex, setShowIndex] = useState<"both" | "sensex" | "nifty">("both");
   const [expandedSummary, setExpandedSummary] = useState(false);
 
+  const stats = useMemo(() => {
+    if (!data) return null;
+    const articles = data.articles;
+    const sizes: Record<string, number> = {};
+    const cats: Record<string, number> = {};
+    const sentiments: Record<string, number> = { positive: 0, negative: 0, neutral: 0, mixed: 0 };
+    const impacts: Record<string, number> = { high: 0, medium: 0, low: 0 };
+    const daily: Record<string, number> = {};
+
+    articles.forEach((a) => {
+      sizes[a.article_size] = (sizes[a.article_size] || 0) + 1;
+      cats[a.category] = (cats[a.category] || 0) + 1;
+      sentiments[a.sentiment] = (sentiments[a.sentiment] || 0) + 1;
+      impacts[a.impact_level] = (impacts[a.impact_level] || 0) + 1;
+      daily[a.date] = (daily[a.date] || 0) + 1;
+    });
+
+    const counts = Object.values(daily);
+    const uniqueCategories = Object.keys(cats).length;
+    const leadCount = sizes["lead"] || 0;
+    const avgDaily = (counts.reduce((a, b) => a + b, 0) / counts.length).toFixed(1);
+    const posRatio = ((sentiments.positive / articles.length) * 100).toFixed(0);
+    const negRatio = ((sentiments.negative / articles.length) * 100).toFixed(0);
+    const highImpact = impacts.high;
+
+    // Daily chart data
+    const dailyChart = Object.entries(daily)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, count]) => ({
+        date: new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+        Articles: count,
+      }));
+
+    // Category pie
+    const categoryPie = Object.entries(cats)
+      .sort(([, a], [, b]) => b - a)
+      .map(([label, value]) => ({ label: categoryLabel(label), value }));
+
+    // Article size data
+    const sizeData = Object.entries(sizes)
+      .sort(([, a], [, b]) => b - a)
+      .map(([label, value]) => ({ name: label.charAt(0).toUpperCase() + label.slice(1).replace("_", " "), value }));
+
+    // Sentiment donut
+    const sentDonut = Object.entries(sentiments).map(([k, v]) => ({
+      name: k.charAt(0).toUpperCase() + k.slice(1),
+      value: v,
+      color: sentimentColor(k),
+    }));
+
+    return {
+      total: articles.length,
+      leadCount,
+      avgDaily,
+      uniqueCategories,
+      posRatio,
+      negRatio,
+      highImpact,
+      minDaily: Math.min(...counts),
+      maxDaily: Math.max(...counts),
+      publishingDays: counts.length,
+      dailyChart,
+      categoryPie,
+      sizeData,
+      sentDonut,
+      sentiments,
+      impacts,
+    };
+  }, [data]);
+
   if (loading) return <LoadingSkeleton />;
-  if (error || !data) return <div className="p-8 text-red-400">Error: {error}</div>;
-
-  const { kpi_cards, time_series } = data.dashboard_charts;
-
-  const kpis = [
-    { label: "Sensex Return", value: formatPercent(kpi_cards.sensex_period_return), color: "red" as const, icon: <TrendingDown size={16} /> },
-    { label: "Gold Return", value: formatPercent(kpi_cards.gold_period_return), color: "green" as const, icon: <CircleDollarSign size={16} /> },
-    { label: "Silver Return", value: formatPercent(kpi_cards.silver_period_return), color: "green" as const, icon: <Gem size={16} /> },
-    { label: "Rupee Change", value: `+${kpi_cards.rupee_period_change.toFixed(2)}`, color: "red" as const, icon: <ArrowDownUp size={16} /> },
-    { label: "Net FII Flow", value: `-Rs ${formatINR(Math.abs(kpi_cards.net_fii_flow))} Cr`, color: "red" as const, icon: <Users size={16} /> },
-    { label: "Net DII Flow", value: `+Rs ${formatINR(kpi_cards.net_dii_flow)} Cr`, color: "green" as const, icon: <Users size={16} /> },
-    { label: "Sentiment", value: `${kpi_cards.overall_sentiment_score.toFixed(2)} (Mildly +ve)`, color: "green" as const, icon: <Scale size={16} /> },
-    { label: "Total Articles", value: String(kpi_cards.total_articles), color: "neutral" as const, icon: <Newspaper size={16} /> },
-    { label: "Avg Daily", value: String(kpi_cards.avg_daily_articles), color: "neutral" as const, icon: <FileText size={16} /> },
-    { label: "Policy Changes", value: String(kpi_cards.policy_changes_count), color: "gold" as const, icon: <Layers size={16} /> },
-    { label: "IPOs Tracked", value: String(kpi_cards.ipos_tracked), color: "neutral" as const, icon: <TrendingUp size={16} /> },
-    { label: "Top Sector", value: kpi_cards.most_covered_sector, color: "gold" as const, icon: <Lightbulb size={16} /> },
-  ];
-
-  // Merge sensex and nifty for dual chart
-  const marketData = time_series.sensex_daily.map((s, i) => ({
-    date: formatDate(s.date),
-    Sensex: s.value,
-    Nifty: time_series.nifty_daily[i]?.value,
-  }));
-
-  // Gold and Silver data
-  const metalData = time_series.gold_daily.map((g, i) => ({
-    date: formatDate(g.date),
-    Gold: g.value,
-    Silver: time_series.silver_daily[i]?.value,
-  }));
-
-  // FII vs DII
-  const flowData: { date: string; FII: number; DII: number }[] = [];
-  const fiiMap = new Map(time_series.fii_daily.map((f) => [f.date, f.value]));
-  const diiMap = new Map(time_series.dii_daily.map((d) => [d.date, d.value]));
-  const allFlowDates = [...new Set([...time_series.fii_daily.map((f) => f.date), ...time_series.dii_daily.map((d) => d.date)])].sort();
-  allFlowDates.forEach((date) => {
-    flowData.push({ date: formatDate(date), FII: fiiMap.get(date) ?? 0, DII: diiMap.get(date) ?? 0 });
-  });
+  if (error || !data || !stats) return <div className="p-8 text-red-400">Error: {error}</div>;
 
   return (
     <div className="p-4 lg:p-6 space-y-6 max-w-[1400px] mx-auto">
       {/* Header */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-2">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <h1 className="text-2xl lg:text-3xl font-bold">
           <span className="text-[#f5a623]">Karobar</span>{" "}
-          <span className="text-[#e4e4e7]">Intelligence</span>
+          <span className="text-[#e4e4e7]">Editorial Intelligence</span>
         </h1>
         <p className="text-[#a1a1aa] text-sm mt-1">
-          January 2026 &middot; Amar Ujala Business Section &middot; {data.metadata.total_pdfs_processed} Pages &middot; {data.metadata.total_articles_extracted} Articles
+          January 2026 &middot; Amar Ujala Business Section &middot; {data.metadata.total_pdfs_processed} Pages Analyzed &middot; {stats.total} Articles Extracted
         </p>
       </motion.div>
 
       {/* KPI Cards */}
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 lg:mx-0 lg:px-0 lg:grid lg:grid-cols-6 lg:gap-3">
-        {kpis.map((kpi, i) => (
-          <KpiCard key={kpi.label} {...kpi} delay={i * 0.05} />
-        ))}
+        <KpiCard label="Total Articles" value={String(stats.total)} icon={<Newspaper size={16} />} delay={0} />
+        <KpiCard label="Lead Stories" value={String(stats.leadCount)} color="gold" icon={<Star size={16} />} delay={0.05} />
+        <KpiCard label="Avg/Day" value={stats.avgDaily} icon={<BarChart3 size={16} />} delay={0.1} />
+        <KpiCard label="Categories" value={String(stats.uniqueCategories)} icon={<Layers size={16} />} delay={0.15} />
+        <KpiCard label="Positive" value={`${stats.posRatio}%`} color="green" icon={<TrendingUp size={16} />} delay={0.2} />
+        <KpiCard label="High Impact" value={String(stats.highImpact)} color="red" icon={<Target size={16} />} delay={0.25} />
       </div>
 
-      {/* Market Overview Chart */}
-      <ChartCard
-        title="Market Overview"
-        subtitle="BSE Sensex & NSE Nifty — January 2026"
-        action={
-          <div className="flex gap-1">
-            {(["both", "sensex", "nifty"] as const).map((opt) => (
-              <button
-                key={opt}
-                onClick={() => setShowIndex(opt)}
-                className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
-                  showIndex === opt ? "bg-[#f5a623]/20 text-[#f5a623]" : "text-[#a1a1aa] hover:bg-[#1e1e2e]"
-                }`}
-              >
-                {opt === "both" ? "Both" : opt === "sensex" ? "Sensex" : "Nifty"}
-              </button>
-            ))}
-          </div>
-        }
-      >
-        <ResponsiveContainer width="100%" height={320}>
-          <AreaChart data={marketData} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
-            <defs>
-              <linearGradient id="sensexGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={CHART_COLORS.sensex} stopOpacity={0.3} />
-                <stop offset="95%" stopColor={CHART_COLORS.sensex} stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="niftyGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={CHART_COLORS.nifty} stopOpacity={0.3} />
-                <stop offset="95%" stopColor={CHART_COLORS.nifty} stopOpacity={0} />
-              </linearGradient>
-            </defs>
+      {/* Daily Output Chart */}
+      <ChartCard title="Daily Publishing Output" subtitle={`${stats.publishingDays} publishing days — min ${stats.minDaily}, max ${stats.maxDaily} articles/day`}>
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={stats.dailyChart} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
-            <XAxis dataKey="date" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
-            <YAxis yAxisId="sensex" domain={["auto", "auto"]} tick={{ fill: "#a1a1aa", fontSize: 11 }} hide={showIndex === "nifty"} />
-            <YAxis yAxisId="nifty" orientation="right" domain={["auto", "auto"]} tick={{ fill: "#a1a1aa", fontSize: 11 }} hide={showIndex === "sensex"} />
-            <Tooltip content={<CustomTooltip />} />
-            {showIndex !== "nifty" && (
-              <Area yAxisId="sensex" type="monotone" dataKey="Sensex" stroke={CHART_COLORS.sensex} fill="url(#sensexGrad)" strokeWidth={2} dot={false} />
-            )}
-            {showIndex !== "sensex" && (
-              <Area yAxisId="nifty" type="monotone" dataKey="Nifty" stroke={CHART_COLORS.nifty} fill="url(#niftyGrad)" strokeWidth={2} dot={false} />
-            )}
-            <Legend />
-          </AreaChart>
+            <XAxis dataKey="date" tick={{ fill: "#a1a1aa", fontSize: 10 }} interval={1} />
+            <YAxis tick={{ fill: "#a1a1aa", fontSize: 11 }} />
+            <Tooltip content={<ChartTooltip />} />
+            <Bar dataKey="Articles" fill="#f5a623" radius={[3, 3, 0, 0]} />
+          </BarChart>
         </ResponsiveContainer>
       </ChartCard>
 
-      {/* Two Column: Gold/Silver + FII/DII */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="Gold & Silver" subtitle="Price trends — January 2026">
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={metalData} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
-              <XAxis dataKey="date" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
-              <YAxis yAxisId="gold" domain={["auto", "auto"]} tick={{ fill: "#a1a1aa", fontSize: 11 }} />
-              <YAxis yAxisId="silver" orientation="right" domain={["auto", "auto"]} tick={{ fill: "#a1a1aa", fontSize: 11 }} />
-              <Tooltip content={<CustomTooltip />} />
-              <Line yAxisId="gold" type="monotone" dataKey="Gold" stroke={CHART_COLORS.gold} strokeWidth={2} dot={false} />
-              <Line yAxisId="silver" type="monotone" dataKey="Silver" stroke={CHART_COLORS.silver} strokeWidth={2} dot={false} />
-              <Legend />
-            </LineChart>
+      {/* Two Column: Category Pie + Sentiment + Article Type */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Category Distribution */}
+        <ChartCard title="Content Categories" subtitle={`${stats.uniqueCategories} categories across ${stats.total} articles`}>
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie
+                data={stats.categoryPie}
+                cx="50%"
+                cy="50%"
+                innerRadius={50}
+                outerRadius={100}
+                dataKey="value"
+                nameKey="label"
+                paddingAngle={1}
+              >
+                {stats.categoryPie.map((_, i) => (
+                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip
+                contentStyle={{ backgroundColor: "#1a1a2e", border: "1px solid #2e2e3e", borderRadius: "8px" }}
+                itemStyle={{ color: "#e4e4e7" }}
+              />
+            </PieChart>
           </ResponsiveContainer>
+          <div className="grid grid-cols-2 gap-1.5 mt-2">
+            {stats.categoryPie.slice(0, 8).map((cat, i) => (
+              <div key={cat.label} className="flex items-center gap-1.5 text-xs text-[#a1a1aa]">
+                <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: PIE_COLORS[i] }} />
+                <span className="truncate">{cat.label}</span>
+                <span className="font-mono text-[#e4e4e7] ml-auto">{cat.value}</span>
+              </div>
+            ))}
+          </div>
         </ChartCard>
 
-        <ChartCard title="FII vs DII Flows" subtitle="Institutional activity (Rs Cr)">
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={flowData} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
-              <XAxis dataKey="date" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
-              <YAxis tick={{ fill: "#a1a1aa", fontSize: 11 }} />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="FII" fill={CHART_COLORS.fii} radius={[2, 2, 0, 0]} />
-              <Bar dataKey="DII" fill={CHART_COLORS.dii} radius={[2, 2, 0, 0]} />
-              <Legend />
-            </BarChart>
+        {/* Article Placement */}
+        <ChartCard title="Story Placement" subtitle="How articles are positioned on the page">
+          <div className="space-y-3 mt-2">
+            {stats.sizeData.map((s, i) => {
+              const pct = (s.value / stats.total) * 100;
+              const colors = ["#f5a623", "#3b82f6", "#8b5cf6", "#22c55e", "#ef4444", "#a1a1aa"];
+              return (
+                <motion.div key={s.name} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-[#e4e4e7]">{s.name}</span>
+                    <span className="font-mono text-[#a1a1aa]">{s.value} ({pct.toFixed(0)}%)</span>
+                  </div>
+                  <div className="h-2.5 rounded-full bg-[#0a0a0f] overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${pct}%` }}
+                      transition={{ duration: 0.8, delay: i * 0.1 }}
+                      className="h-full rounded-full"
+                      style={{ backgroundColor: colors[i % colors.length] }}
+                    />
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+          <p className="text-xs text-[#a1a1aa] mt-4">
+            <span className="text-[#f5a623] font-medium">Lead</span> = front-page main story &middot; <span className="text-[#3b82f6] font-medium">Secondary</span> = supporting story &middot; <span className="text-[#8b5cf6] font-medium">Brief</span> = short update
+          </p>
+        </ChartCard>
+
+        {/* Sentiment Balance */}
+        <ChartCard title="Sentiment Balance" subtitle="Editorial tone across all coverage">
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie
+                data={stats.sentDonut}
+                cx="50%"
+                cy="50%"
+                innerRadius={50}
+                outerRadius={85}
+                dataKey="value"
+                nameKey="name"
+                paddingAngle={2}
+              >
+                {stats.sentDonut.map((s) => (
+                  <Cell key={s.name} fill={s.color} />
+                ))}
+              </Pie>
+              <Tooltip
+                contentStyle={{ backgroundColor: "#1a1a2e", border: "1px solid #2e2e3e", borderRadius: "8px" }}
+                itemStyle={{ color: "#e4e4e7" }}
+              />
+            </PieChart>
           </ResponsiveContainer>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            {stats.sentDonut.map((s) => (
+              <div key={s.name} className="flex items-center gap-2 text-sm">
+                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                <span className="text-[#a1a1aa]">{s.name}</span>
+                <span className="font-mono text-[#e4e4e7] ml-auto">{s.value}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 p-2.5 rounded-lg bg-[#0a0a0f] border border-[#1e1e2e]">
+            <p className="text-xs text-[#a1a1aa]">
+              <span className="text-green-400 font-medium">{stats.posRatio}% positive</span> vs{" "}
+              <span className="text-red-400 font-medium">{stats.negRatio}% negative</span> — a{" "}
+              {Number(stats.posRatio) > 60 ? "strongly optimistic" : Number(stats.posRatio) > 50 ? "mildly optimistic" : "balanced"} editorial lean
+            </p>
+          </div>
         </ChartCard>
       </div>
 
+      {/* Impact Distribution */}
+      <ChartCard title="Story Impact Distribution" subtitle="Editor's assessment of article significance">
+        <div className="grid grid-cols-3 gap-4">
+          {[
+            { label: "High Impact", count: stats.impacts.high, color: "#ef4444", desc: "Front-page worthy, market-moving" },
+            { label: "Medium Impact", count: stats.impacts.medium, color: "#f59e0b", desc: "Important but not breaking" },
+            { label: "Low Impact", count: stats.impacts.low, color: "#3b82f6", desc: "Updates, briefs, routine" },
+          ].map((item) => (
+            <motion.div
+              key={item.label}
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="text-center p-4 rounded-lg bg-[#0a0a0f] border border-[#1e1e2e]"
+            >
+              <p className="font-mono text-3xl font-bold" style={{ color: item.color }}>{item.count}</p>
+              <p className="text-sm text-[#e4e4e7] mt-1">{item.label}</p>
+              <p className="text-xs text-[#a1a1aa] mt-0.5">{item.desc}</p>
+              <div className="mt-2 h-1.5 rounded-full bg-[#1e1e2e] overflow-hidden">
+                <div className="h-full rounded-full" style={{ backgroundColor: item.color, width: `${(item.count / stats.total) * 100}%` }} />
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </ChartCard>
+
       {/* Key Insights */}
-      <ChartCard title="Key Insights" subtitle={`${data.key_insights.length} findings from January 2026`}>
+      <ChartCard title="Editorial Insights" subtitle={`${data.key_insights.length} patterns identified`}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {data.key_insights.map((insight, i) => (
             <motion.div
@@ -200,7 +303,7 @@ export default function OverviewPage() {
       </ChartCard>
 
       {/* Narrative Summary */}
-      <ChartCard title="Executive Summary">
+      <ChartCard title="Month Summary">
         <div>
           <AnimatePresence>
             <motion.div
@@ -221,7 +324,7 @@ export default function OverviewPage() {
 
       {/* Footer */}
       <div className="text-center py-4 text-[10px] text-[#a1a1aa]/40">
-        Data Source: Amar Ujala Karobar Section &middot; January 2026 &middot; {data.metadata.total_articles_extracted} Articles from {data.metadata.total_pdfs_processed} Pages
+        Data Source: Amar Ujala Karobar Section &middot; January 2026 &middot; {stats.total} Articles from {data.metadata.total_pdfs_processed} Pages
       </div>
     </div>
   );
