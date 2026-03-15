@@ -90,22 +90,44 @@ export default function NewsroomOverview() {
     const rbiPositive = rbiArticles.filter((a) => a.sentiment === "positive").length;
     const rbiNegative = rbiArticles.filter((a) => a.sentiment === "negative").length;
 
-    // Expert/Analyst tracking
-    const expertEntities: Record<string, { count: number; contexts: string[] }> = {};
-    const knownAnalysts = ["Saumil Gandhi", "VK Vijayakumar", "Praveen Singh", "Pollyanna De Lima", "CS Vigneshwar", "Anuj Chaudhary", "Rajesh Agrawal", "Vinod Nair", "Deepinder Goyal", "Sanjay Malhotra", "Nirmala Sitharaman", "Tuhin Kanta Pandey"];
+    // Expert/Analyst tracking — use a curated list of actual people found in the data
+    const knownPeople = new Set([
+      "Saumil Gandhi", "Donald Trump", "Jyotiraditya Scindia", "Ashwini Vaishnav",
+      "Deepinder Goyal", "Sanjay Malhotra", "PK Singh", "Pollyanna De Lima",
+      "Praveen Singh", "VK Vijayakumar", "Shivraj Singh Chouhan", "Campbell Wilson",
+      "CS Vigneshwar", "Rajesh Agrawal", "Tuhin Kanta Pandey", "Anuj Chaudhary",
+      "Venu Lambu", "Nirmala Sitharaman", "Vinod Nair", "Narendra Modi",
+      "N Chandrasekaran", "Salil Parekh", "Gautam Adani", "Piyush Goyal",
+    ]);
+    const expertEntities: Record<string, { count: number; role: string; contexts: string[] }> = {};
     articles.forEach((a) => {
       a.entities.forEach((e) => {
-        if (knownAnalysts.includes(e) || (e.includes(" ") && e.length > 4 && !["RBI", "NSE", "BSE", "SEBI", "SBI", "TCS", "ITC", "IMF", "EPFO"].includes(e))) {
-          if (!expertEntities[e]) expertEntities[e] = { count: 0, contexts: [] };
+        if (knownPeople.has(e)) {
+          if (!expertEntities[e]) expertEntities[e] = { count: 0, role: "", contexts: [] };
           expertEntities[e].count++;
           if (expertEntities[e].contexts.length < 2) expertEntities[e].contexts.push(a.headline.substring(0, 60));
         }
       });
     });
     const topExperts = Object.entries(expertEntities)
-      .filter(([, v]) => v.count >= 3)
+      .filter(([, v]) => v.count >= 2)
       .sort(([, a], [, b]) => b.count - a.count)
-      .slice(0, 10);
+      .slice(0, 12);
+
+    // Research houses / brokerages
+    const researchHouses: Record<string, number> = {};
+    const houseKeywords = ["securities", "asset", "research", "sharekhan", "capital", "ratings", "mutual", "prudential"];
+    articles.forEach((a) => {
+      a.entities.forEach((e) => {
+        if (houseKeywords.some((k) => e.toLowerCase().includes(k))) {
+          researchHouses[e] = (researchHouses[e] || 0) + 1;
+        }
+      });
+    });
+    const topHouses = Object.entries(researchHouses)
+      .filter(([, v]) => v >= 2)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 6);
 
     // Content type split
     const currentNews = articles.filter((a) => ["corporate_news", "stock_market", "commodities", "currency_forex"].includes(a.category)).length;
@@ -133,7 +155,7 @@ export default function NewsroomOverview() {
       total: articles.length, leadCount, uniqueCategories, posRatio, negRatio,
       highImpact: impacts.high, categoryPie, sizeData, sentDonut, sentiments, impacts,
       investData, intlCount, nationalCount, rbiCount: rbiArticles.length,
-      rbiPositive, rbiNegative, topExperts, currentNews, economyAnalysis, investmentContent,
+      rbiPositive, rbiNegative, topExperts, topHouses, currentNews, economyAnalysis, investmentContent,
     };
   }, [data]);
 
@@ -244,32 +266,40 @@ export default function NewsroomOverview() {
             </div>
           </div>
 
-          {/* Top Experts */}
+          {/* Top Experts — people only */}
           <p className="text-xs text-[#a1a1aa] font-medium mb-2 flex items-center gap-1.5">
-            <Users size={12} /> Most Quoted Experts & Analysts
+            <Users size={12} /> Key People & Experts
           </p>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {stats.topExperts.map(([name, info], i) => (
               <motion.div
                 key={name}
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
-                className="flex items-start gap-2 p-2 rounded-lg bg-[#0a0a0f]/60 border border-[#1e1e2e]/50"
+                transition={{ delay: i * 0.04 }}
+                className="flex items-center gap-2 p-1.5 rounded-md bg-[#0a0a0f]/60 border border-[#1e1e2e]/50"
               >
-                <span className="text-[10px] font-mono text-[#a1a1aa] mt-0.5 w-4 shrink-0">{i + 1}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-[#e4e4e7] font-medium truncate">{name}</span>
-                    <span className="font-mono text-xs text-[#f5a623] ml-2 shrink-0">{info.count}x</span>
-                  </div>
-                  <p className="text-[10px] text-[#a1a1aa] truncate mt-0.5">{info.contexts[0]}</p>
-                </div>
+                <span className="text-[10px] font-mono text-[#a1a1aa] w-3 shrink-0">{i + 1}</span>
+                <span className="text-xs text-[#e4e4e7] font-medium truncate flex-1">{name}</span>
+                <span className="font-mono text-[10px] text-[#f5a623] shrink-0">{info.count}x</span>
               </motion.div>
             ))}
           </div>
-          {stats.topExperts.length === 0 && (
-            <p className="text-xs text-[#a1a1aa] text-center py-4">No recurring expert voices found</p>
+
+          {/* Research Houses */}
+          {stats.topHouses.length > 0 && (
+            <>
+              <p className="text-xs text-[#a1a1aa] font-medium mt-3 mb-2 flex items-center gap-1.5">
+                <BookOpen size={12} /> Quoted Research Houses
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {stats.topHouses.map(([name, count]) => (
+                  <span key={name} className="text-[10px] px-2 py-1 rounded-full bg-[#8b5cf6]/15 text-[#a78bfa] border border-[#8b5cf6]/20">
+                    {name} ({count})
+                  </span>
+                ))}
+              </div>
+            </>
           )}
         </ChartCard>
       </div>

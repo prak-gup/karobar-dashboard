@@ -234,7 +234,7 @@ export default function RhythmPage() {
           Publishing Rhythm
         </h1>
         <p className="text-[#a1a1aa] text-sm mt-1">
-          Editorial patterns and publishing cadence across January 2025 ({totalArticles} articles, Mon-Sat)
+          Editorial patterns and publishing cadence across January 2026 ({totalArticles} articles, Mon-Sat)
         </p>
       </motion.div>
 
@@ -248,8 +248,7 @@ export default function RhythmPage() {
           </span>
         }
       >
-        <div className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height={288}>
             <BarChart data={dayOfWeekData} barCategoryGap="20%">
               <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
               <XAxis dataKey="name" tick={{ fill: "#a1a1aa", fontSize: 12 }} axisLine={false} tickLine={false} />
@@ -270,7 +269,6 @@ export default function RhythmPage() {
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-        </div>
         <p className="text-xs text-[#a1a1aa] mt-2">
           Saturday carries the heaviest edition at {busiestDay.pct.toFixed(1)}% of all articles,
           consistent with weekend special supplements. Weekdays show relatively even distribution.
@@ -285,8 +283,7 @@ export default function RhythmPage() {
           subtitle="How editorial focus shifted week over week (top 8 categories)"
           action={<Layers className="w-4 h-4 text-[#a1a1aa]" />}
         >
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height={288}>
               <BarChart data={weeklyMixData} barCategoryGap="15%">
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
                 <XAxis dataKey="name" tick={{ fill: "#a1a1aa", fontSize: 12 }} axisLine={false} tickLine={false} />
@@ -303,7 +300,6 @@ export default function RhythmPage() {
                 ))}
               </BarChart>
             </ResponsiveContainer>
-          </div>
           {/* Legend */}
           <div className="flex flex-wrap gap-3 mt-3">
             {top8Cats.map((cat, i) => (
@@ -331,8 +327,7 @@ export default function RhythmPage() {
           subtitle="Article size distribution — are we publishing more leads or sidebars?"
           action={<BarChart3 className="w-4 h-4 text-[#a1a1aa]" />}
         >
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height={288}>
               <BarChart data={contentDepthData} barCategoryGap="15%">
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
                 <XAxis dataKey="name" tick={{ fill: "#a1a1aa", fontSize: 12 }} axisLine={false} tickLine={false} />
@@ -349,7 +344,6 @@ export default function RhythmPage() {
                 ))}
               </BarChart>
             </ResponsiveContainer>
-          </div>
           {/* Legend */}
           <div className="flex flex-wrap gap-3 mt-3">
             {SIZE_TYPES.map((size) => (
@@ -369,8 +363,8 @@ export default function RhythmPage() {
       >
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Bar chart: avg sentiment score */}
-          <div className="lg:col-span-2 h-64">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="lg:col-span-2">
+            <ResponsiveContainer width="100%" height={256}>
               <BarChart data={sentimentTrendData} barCategoryGap="25%">
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
                 <XAxis dataKey="name" tick={{ fill: "#a1a1aa", fontSize: 12 }} axisLine={false} tickLine={false} />
